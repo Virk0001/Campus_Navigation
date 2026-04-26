@@ -87,4 +87,5 @@ COMPREHENSIVE_ANALYSIS.md
 
 # Note: .env files and .vscode/ settings ARE INCLUDED (private repo)
 # Note: All project source files, configs, and documentation WILL BE PUSHED
+.env.production
 .vercel
