@@ -6,7 +6,7 @@ import 'leaflet-routing-machine/dist/leaflet-routing-machine.css';
 // @ts-ignore - leaflet-routing-machine doesn't have proper ES module exports
 import 'leaflet-routing-machine';
 import { MAP_CONFIG, MARKER_ICONS } from '../../config/mapConfig';
-import { Location, Event } from '../../types';
+import { Location, Event, Coordinates } from '../../types';
 import { EventService } from '../../services/eventService';
 
 // Fix for default markers in Leaflet with Webpack/Vite (avoid explicit any)
@@ -27,6 +27,12 @@ interface LeafletMapProps {
   enableRouting?: boolean;
   routingMode?: boolean;
   onToggleRouting?: () => void;
+  focusCoordinates?: Coordinates | null;
+  assistantRoutePlan?: {
+    requestKey: number;
+    start: { label: string; coordinates: Coordinates };
+    destination: { label: string; coordinates: Coordinates };
+  } | null;
 }
 
 type RouteTarget = 'start' | 'destination';
@@ -40,6 +46,8 @@ export const LeafletMap = memo<LeafletMapProps>(({
   className = '',
   enableRouting = false,
   routingMode = false,
+  focusCoordinates,
+  assistantRoutePlan,
 }) => {
   const mapRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
@@ -47,6 +55,7 @@ export const LeafletMap = memo<LeafletMapProps>(({
   const eventMarkersRef = useRef<L.Marker[]>([]); // Separate ref for event markers
   const routingControlRef = useRef<any>(null); // Routing control reference
   const waypointMarkersRef = useRef<Array<L.Marker | null>>([null, null]); // Start / destination markers
+  const lastAssistantRouteKeyRef = useRef<number | null>(null);
   
   // Existing state
   // const [mapStyle, setMapStyle] = useState<'default' | 'satellite' | 'dark' | 'terrain'>('default');
@@ -131,7 +140,12 @@ export const LeafletMap = memo<LeafletMapProps>(({
     waypointMarkersRef.current[index] = waypointMarker;
   }, [removeWaypointMarker]);
 
-  const setRoutePoint = useCallback((target: RouteTarget, point: L.LatLng, label: string) => {
+  const setRoutePoint = useCallback((
+    target: RouteTarget,
+    point: L.LatLng,
+    label: string,
+    options?: { notify?: boolean }
+  ) => {
     renderWaypointMarker(target, point, label);
     setRoutePoints(prev => ({ ...prev, [target]: point }));
     setRoutePointLabels(prev => ({ ...prev, [target]: label }));
@@ -139,11 +153,13 @@ export const LeafletMap = memo<LeafletMapProps>(({
     setCurrentStepIndex(0);
     setActiveRouteTarget(target === 'start' ? 'destination' : 'start');
 
-    const successMessage = target === 'start'
-      ? 'Start point selected. Now choose the destination.'
-      : 'Destination selected. Calculating route...';
+    if (options?.notify !== false) {
+      const successMessage = target === 'start'
+        ? 'Start point selected. Now choose the destination.'
+        : 'Destination selected. Calculating route...';
 
-    toast.success(successMessage, { duration: 2200 });
+      toast.success(successMessage, { duration: 2200 });
+    }
   }, [renderWaypointMarker]);
 
   const handleMapClick = useCallback((e: L.LeafletMouseEvent) => {
@@ -314,6 +330,44 @@ export const LeafletMap = memo<LeafletMapProps>(({
       toast.error('Error creating route. Please try again.');
     }
   }, [routePoints.start, routePoints.destination, enableRouting]);
+
+  useEffect(() => {
+    if (!mapInstanceRef.current || !focusCoordinates) return;
+
+    mapInstanceRef.current.setView([focusCoordinates.lat, focusCoordinates.lng], 18, {
+      animate: true,
+    });
+  }, [focusCoordinates]);
+
+  useEffect(() => {
+    if (!assistantRoutePlan || !mapInstanceRef.current || !enableRouting) return;
+    if (assistantRoutePlan.requestKey === lastAssistantRouteKeyRef.current) return;
+
+    lastAssistantRouteKeyRef.current = assistantRoutePlan.requestKey;
+
+    const startPoint = L.latLng(
+      assistantRoutePlan.start.coordinates.lat,
+      assistantRoutePlan.start.coordinates.lng
+    );
+    const destinationPoint = L.latLng(
+      assistantRoutePlan.destination.coordinates.lat,
+      assistantRoutePlan.destination.coordinates.lng
+    );
+
+    setRoutePoint('start', startPoint, assistantRoutePlan.start.label, { notify: false });
+    setRoutePoint('destination', destinationPoint, assistantRoutePlan.destination.label, { notify: false });
+    setActiveRouteTarget('start');
+
+    mapInstanceRef.current.fitBounds(
+      L.latLngBounds([startPoint, destinationPoint]),
+      { padding: [60, 60] }
+    );
+
+    toast.success(
+      `Route planner ready: ${assistantRoutePlan.start.label} to ${assistantRoutePlan.destination.label}`,
+      { duration: 2500 }
+    );
+  }, [assistantRoutePlan, enableRouting, setRoutePoint]);
 
   // Use the already filtered locations from props (no fallback - empty means show nothing)
   const filteredLocations = useMemo(() => {

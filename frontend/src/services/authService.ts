@@ -119,20 +119,39 @@ export class AuthService {
    * 3. Sends to backend to create/update user
    */
   static async signInWithGoogle(): Promise<User> {
-    const provider = new GoogleAuthProvider();
-    
-    // Sign in with Google popup
-    const result = await signInWithPopup(auth, provider);
-    
-    // Get ID token from Firebase
-    const idToken = await result.user.getIdToken();
-    
-    // Send ID token to backend
-    const response = await apiClient.post<BackendAuthResponse>('/auth/google', {
-      idToken
-    });
-    
-    return response.data.user;
+    try {
+      const provider = new GoogleAuthProvider();
+      
+      // Sign in with Google popup
+      const result = await signInWithPopup(auth, provider);
+      
+      // Get ID token from Firebase
+      const idToken = await result.user.getIdToken();
+      
+      // Send ID token to backend
+      const response = await apiClient.post<BackendAuthResponse>('/auth/google', {
+        idToken
+      });
+      
+      return response.data.user;
+    } catch (error: unknown) {
+      const errorCode = (error as { code?: string })?.code;
+      const errorMessage = (error as Error)?.message || '';
+
+      console.error('Google sign-in error:', { errorCode, errorMessage, error });
+
+      if (errorCode === 'auth/operation-not-allowed' || errorMessage.includes('operation-not-allowed')) {
+        throw new Error('Google sign-in is not enabled for this Firebase project. Enable Google provider in Firebase Authentication.');
+      } else if (errorCode === 'auth/popup-closed-by-user' || errorMessage.includes('popup-closed-by-user')) {
+        throw new Error('Google sign-in was cancelled before completion.');
+      } else if (errorCode === 'auth/popup-blocked' || errorMessage.includes('popup-blocked')) {
+        throw new Error('Google sign-in popup was blocked by the browser. Allow popups and try again.');
+      } else if (errorCode === 'auth/unauthorized-domain' || errorMessage.includes('unauthorized-domain')) {
+        throw new Error('This domain is not authorized in Firebase. Add your app domain in Firebase Authentication settings.');
+      }
+
+      throw new Error(errorMessage || 'Google sign-in failed. Please try again.');
+    }
   }
 
   /**

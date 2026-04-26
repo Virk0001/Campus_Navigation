@@ -52,6 +52,10 @@ const SearchFilters = memo<SearchFiltersProps>(({
   }, 300);
 
   useEffect(() => {
+    setLocalSearchQuery(searchQuery);
+  }, [searchQuery]);
+
+  useEffect(() => {
     debouncedSearch(localSearchQuery);
   }, [localSearchQuery, debouncedSearch]);
 

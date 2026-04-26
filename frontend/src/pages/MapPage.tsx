@@ -1,16 +1,25 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuthStore } from '../stores/authStore';
 import { LocationService } from '../services/locationService';
 import { EventService } from '../services/eventService';
-import { Location, Event } from '../types';
+import { Coordinates, Location, Event } from '../types';
 import LoadingSpinner from '../components/LoadingSpinner';
 import { LeafletMap } from '../components/Map/LeafletMap';
 import SearchFilters from '../components/SearchFilters';
 import { ProfileDropdown } from '../components/ProfileDropdown';
+import SmartNavAssistant from '../components/SmartNavAssistant';
+import RecommendedEvents from '../components/RecommendedEvents';
+import { useMapStore } from '../stores/mapStore';
+import { SmartNavAssistantResult } from '../services/smartNavAssistantService';
+import {
+  EventRecommendation,
+  EventRecommendationService,
+} from '../services/eventRecommendationService';
 
 const MapPage: React.FC = () => {
   const { user } = useAuthStore();
+  const { setSearchQuery, updateFilters } = useMapStore();
   const [locations, setLocations] = useState<Location[]>([]);
   const [events, setEvents] = useState<Event[]>([]);
   const [filteredLocations, setFilteredLocations] = useState<Location[]>([]);
@@ -19,8 +28,13 @@ const MapPage: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedLocation, setSelectedLocation] = useState<Location | null>(null);
-  const [selectedEvent, setSelectedEvent] = useState<Event | null>(null);
   const [routingMode, setRoutingMode] = useState(false);
+  const [focusCoordinates, setFocusCoordinates] = useState<Coordinates | null>(null);
+  const [assistantRoutePlan, setAssistantRoutePlan] = useState<{
+    requestKey: number;
+    start: { label: string; coordinates: Coordinates };
+    destination: { label: string; coordinates: Coordinates };
+  } | null>(null);
 
   useEffect(() => {
     loadInitialData();
@@ -100,19 +114,62 @@ const MapPage: React.FC = () => {
 
   const handleLocationSelect = useCallback((location: Location) => {
     setSelectedLocation(location);
-    // Clear event selection when location is selected
-    setSelectedEvent(null);
   }, []);
 
-  const handleEventSelect = useCallback((event: Event) => {
-    setSelectedEvent(event);
-    // Clear location selection when event is selected
+  const handleEventSelect = useCallback(() => {
     setSelectedLocation(null);
   }, []);
 
   const handleToggleRouting = useCallback(() => {
     setRoutingMode(prev => !prev);
   }, []);
+
+  const handleAssistantApply = useCallback((result: SmartNavAssistantResult) => {
+    setSearchQuery(result.mapState.searchQuery);
+    updateFilters({
+      locationTypes: result.mapState.locationTypes,
+      eventCategories: result.mapState.eventCategories,
+      viewMode: result.mapState.viewMode,
+    });
+
+    setSelectedLocation(result.selectedLocation);
+    setFocusCoordinates(result.focusCoordinates);
+
+    if (result.route) {
+      setRoutingMode(true);
+      setAssistantRoutePlan({
+        requestKey: Date.now(),
+        start: result.route.start,
+        destination: result.route.destination,
+      });
+      return;
+    }
+
+    setAssistantRoutePlan(null);
+  }, [setSearchQuery, updateFilters]);
+
+  const recommendations = useMemo(() => (
+    EventRecommendationService.getRecommendations({
+      events,
+      locations,
+      user,
+      anchorLocation: selectedLocation,
+      limit: 3,
+    })
+  ), [events, locations, user, selectedLocation]);
+
+  const handleRecommendedEventShow = useCallback((recommendation: EventRecommendation) => {
+    setSearchQuery('');
+    updateFilters({
+      locationTypes: [],
+      eventCategories: [recommendation.event.category],
+      viewMode: 'events',
+    });
+
+    setSelectedLocation(recommendation.location);
+    setFocusCoordinates(recommendation.location?.coordinates ?? null);
+    setAssistantRoutePlan(null);
+  }, [setSearchQuery, updateFilters]);
 
   if (isLoading) {
     return (
@@ -209,105 +266,48 @@ const MapPage: React.FC = () => {
               events={events}
               onLocationFilter={setFilteredLocations}
               onEventFilter={setFilteredEvents}
-              className="sticky top-6"
+              className="mb-6"
               routingMode={routingMode}
               onToggleRouting={handleToggleRouting}
             />
 
-            {/* Selected Item Details */}
-            {(selectedLocation || selectedEvent) && (
-              <div className="mt-6 card p-4" style={{
-                background: 'linear-gradient(135deg, rgba(255, 255, 248, 0.5), rgba(255, 255, 245, 0.3))',
-                borderColor: 'rgba(16, 185, 129, 0.3)'
-              }}>
-                <h3 className="font-semibold text-lg mb-3 text-transparent bg-clip-text bg-gradient-to-r from-amber-600 to-yellow-600">
-                  {selectedLocation ? 'Location Details' : 'Event Details'}
-                </h3>
-                
-                {selectedLocation && (
-                  <div>
-                    <h4 className="font-medium text-gray-900">{selectedLocation.name}</h4>
-                    <p className="text-sm text-gray-600 mt-1">
-                      {selectedLocation.description || 'No description available'}
-                    </p>
-                    <div className="mt-3 space-y-2">
-                      <div className="flex items-center text-sm">
-                        <span className="font-medium text-gray-500 w-16">Type:</span>
-                        <span className="text-gray-900 capitalize">{selectedLocation.type}</span>
-                      </div>
-                      {Array.isArray(selectedLocation.tags) && selectedLocation.tags.length > 0 && (
-                        <div className="flex items-center text-sm">
-                          <span className="font-medium text-gray-500 w-16">Tags:</span>
-                          <span className="text-gray-900">{selectedLocation.tags.join(', ')}</span>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )}
-
-                {selectedEvent && (
-                  <div>
-                    <h4 className="font-medium text-gray-900">{selectedEvent.title}</h4>
-                    <p className="text-sm text-gray-600 mt-1">{selectedEvent.description}</p>
-                    <div className="mt-3 space-y-2">
-                      <div className="flex items-center text-sm">
-                        <span className="font-medium text-gray-500 w-20">Category:</span>
-                        <span className="text-gray-900">{selectedEvent.category}</span>
-                      </div>
-                      <div className="flex items-center text-sm">
-                        <span className="font-medium text-gray-500 w-20">Date:</span>
-                        <span className="text-gray-900">
-                          {new Date(selectedEvent.dateTime).toLocaleDateString()}
-                        </span>
-                      </div>
-                      <div className="flex items-center text-sm">
-                        <span className="font-medium text-gray-500 w-20">Time:</span>
-                        <span className="text-gray-900">
-                          {new Date(selectedEvent.dateTime).toLocaleTimeString([], { 
-                            hour: '2-digit', 
-                            minute: '2-digit' 
-                          })}
-                        </span>
-                      </div>
-                      <div className="flex items-center text-sm">
-                        <span className="font-medium text-gray-500 w-20">Capacity:</span>
-                        <span className="text-gray-900">
-                          {(Array.isArray(selectedEvent.attendees) ? selectedEvent.attendees.length : 0)}/{selectedEvent.capacity}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                <button
-                  onClick={() => {
-                    setSelectedLocation(null);
-                    setSelectedEvent(null);
-                  }}
-                  className="mt-4 w-full px-3 py-2 text-sm bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 transition-colors"
-                >
-                  Clear Selection
-                </button>
-              </div>
-            )}
+            <SmartNavAssistant
+              locations={locations}
+              events={events}
+              onApply={handleAssistantApply}
+              className="mb-6"
+            />
           </div>
 
           {/* Map */}
-          <div className="lg:col-span-3" style={{
-            borderRadius: '1rem',
-            overflow: 'hidden',
-            boxShadow: '0 10px 40px rgba(16, 185, 129, 0.25), 0 0 0 3px rgba(16, 185, 129, 0.2)',
-            border: '3px solid rgba(16, 185, 129, 0.4)'
-          }}>
-            <LeafletMap
-              locations={filteredLocations}
-              events={filteredEvents}
-              onLocationSelect={handleLocationSelect}
-              onEventSelect={handleEventSelect}
-              enableRouting={true}
-              routingMode={routingMode}
-              onToggleRouting={() => setRoutingMode(!routingMode)}
-              className="h-[calc(100vh-8rem)]"
+          <div className="lg:col-span-3 space-y-6">
+            <div style={{
+              borderRadius: '1rem',
+              overflow: 'hidden',
+              boxShadow: '0 10px 40px rgba(16, 185, 129, 0.25), 0 0 0 3px rgba(16, 185, 129, 0.2)',
+              border: '3px solid rgba(16, 185, 129, 0.4)'
+            }}>
+              <LeafletMap
+                locations={filteredLocations}
+                events={filteredEvents}
+                selectedLocation={selectedLocation || undefined}
+                onLocationSelect={handleLocationSelect}
+                onEventSelect={handleEventSelect}
+                enableRouting={true}
+                routingMode={routingMode}
+                onToggleRouting={() => setRoutingMode(!routingMode)}
+                focusCoordinates={focusCoordinates}
+                assistantRoutePlan={assistantRoutePlan}
+                className="h-[calc(100vh-8rem)]"
+              />
+            </div>
+          </div>
+
+          <div className="lg:col-span-4">
+            <RecommendedEvents
+              recommendations={recommendations}
+              onShowEvent={handleRecommendedEventShow}
+              layout="horizontal"
             />
           </div>
         </div>

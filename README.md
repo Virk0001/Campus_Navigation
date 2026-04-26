@@ -6,6 +6,8 @@ Smart Navigator is a campus navigation and event discovery platform for Thapar I
 
 - Interactive Leaflet map with custom location and event markers
 - Search and filter support for location types and live event categories
+- Ask SmartNav assistant for natural-language map search, filtering, and routing
+- Personalized event recommendations based on interests, live status, and nearby context
 - Route planner with separate start and destination selection, swap, and clear actions
 - Event-aware map experience that shows active events directly on the campus map
 - Admin and organizer dashboards for managing users, locations, and events
@@ -21,6 +23,8 @@ Smart Navigator is a campus navigation and event discovery platform for Thapar I
 - Filter locations by type
 - Filter events by category
 - Toggle map visibility between all items, locations only, or events only
+- Ask SmartNav assistant for prompts like "take me from main gate to library"
+- Get personalized event picks with short "why this matches" explanations
 - Route planner with:
   - dedicated start and destination slots
   - map-click and marker-click route selection
@@ -83,13 +87,14 @@ SmartNav-main/
 - npm
 - A Firebase project with:
   - Authentication enabled
+  - Google sign-in enabled if you want `Continue with Google` to work
   - Firestore enabled
   - Service account credentials for admin access
 
 ## Installation
 
 ```bash
-
+git clone https://github.com/NobleChicken97/SmartNav.git
 cd SmartNav-main
 npm run install:all
 ```
@@ -115,6 +120,33 @@ FIREBASE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY----
 ### Frontend
 
 Create `frontend/.env` with your client Firebase configuration and API base URL as required by the frontend app.
+
+Example:
+
+```bash
+VITE_API_URL=/api
+VITE_FIREBASE_API_KEY=your-firebase-api-key
+VITE_FIREBASE_AUTH_DOMAIN=your-project.firebaseapp.com
+VITE_FIREBASE_PROJECT_ID=your-project-id
+VITE_FIREBASE_STORAGE_BUCKET=your-project.appspot.com
+VITE_FIREBASE_MESSAGING_SENDER_ID=your-messaging-sender-id
+VITE_FIREBASE_APP_ID=your-firebase-app-id
+```
+
+### Firebase Authentication Setup
+
+Before testing login flows, configure Firebase Authentication for your project:
+
+1. Open Firebase Console.
+2. Select your Firebase project.
+3. Go to `Authentication` -> `Sign-in method`.
+4. Enable `Email/Password`.
+5. Enable `Google` if you want Google sign-in in the app.
+6. Choose a support email for the Google provider and save.
+7. Go to `Authentication` -> `Settings` -> `Authorized domains`.
+8. Add your frontend host if needed, such as `localhost`.
+
+If Google login shows `auth/operation-not-allowed`, it means the Google provider is still disabled in Firebase.
 
 ## Running Locally
 
@@ -202,6 +234,8 @@ Relevant deployment files:
 - Event categories in the filter panel are generated from currently active events.
 - Route planning works by selecting a start point and a destination from either map clicks or existing markers.
 - Event and location visibility can be switched directly from the map filters.
+- The Ask SmartNav panel can translate plain-English prompts into map filters, search, and route setup.
+- Recommended events use the signed-in user's interests and active event context to rank useful suggestions.
 
 ## Status
 
