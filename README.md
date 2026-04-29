@@ -2,6 +2,10 @@
 
 Smart Navigator is a campus navigation and event discovery platform for Thapar Institute of Engineering and Technology. It combines an interactive campus map, searchable locations, role-based dashboards, and event-aware routing so students, organizers, and admins can manage and explore campus information from one place.
 
+# My Project
+
+Live Demo: [https://smartnav-ten.vercel.app/](https://smartnav-ten.vercel.app/)
+
 ## Current Highlights
 
 - Interactive Leaflet map with custom location and event markers
@@ -94,7 +98,7 @@ SmartNav-main/
 ## Installation
 
 ```bash
-git clone https://github.com/NobleChicken97/SmartNav.git
+git clone https://github.com/Virk0001/Campus_Navigation.git
 cd SmartNav-main
 npm run install:all
 ```
